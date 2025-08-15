@@ -52,6 +52,7 @@ const Login = ({ onLogin }) => {
 
         <form onSubmit={handleSubmit} className="login-form">
           {error && <div className="error-message">{error}</div>}
+          }
           
           <div className="form-group">
             <label htmlFor="username">Username</label>
