@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Login from './components/Login';
+import AdminPanel from './components/AdminPanel';
 import './App.css';
 
 const API = 'http://localhost:5000';
 
-function App() {
+const ChatApp = ({ user, token, onLogout }) => {
   const [to, setTo] = useState('');
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
@@ -15,12 +18,32 @@ function App() {
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
+  // API call with authentication
+  const apiCall = async (url, options = {}) => {
+    const response = await fetch(`${API}${url}`, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+    
+    if (response.status === 401) {
+      onLogout();
+      return;
+    }
+    
+    return response.json();
+  };
+
   // Fetch messages
   const fetchMessages = async () => {
     try {
-      const res = await fetch(`${API}/messages`);
-      const data = await res.json();
+      const data = await apiCall('/messages');
+      if (data) {
       setMessages(data);
+      }
     } catch (err) {
       console.error(err);
       setStatus('Failed to fetch messages');
@@ -31,9 +54,8 @@ function App() {
   const sendSMS = async () => {
     if (!to || !message) return;
     try {
-      await fetch(`${API}/send-sms`, {
+      await apiCall('/send-sms', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to, message })
       });
       setMessage('');
@@ -139,7 +161,7 @@ function App() {
             <svg viewBox="0 0 24 24" className="logo-icon">
               <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
             </svg>
-            <span className="logo-text">Voice</span>
+            <span className="logo-text">Voice - {user.username}</span>
           </div>
           <button 
             className="collapse-btn"
@@ -280,6 +302,15 @@ function App() {
         <div className="sidebar-footer">
           <button 
             className="theme-toggle"
+            onClick={onLogout}
+          >
+            <svg viewBox="0 0 24 24" className="theme-icon">
+              <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+            </svg>
+            <span className="theme-text">Logout</span>
+          </button>
+          <button 
+            className="theme-toggle"
             onClick={() => setDarkMode(!darkMode)}
           >
             <svg viewBox="0 0 24 24" className="theme-icon">
@@ -411,6 +442,88 @@ function App() {
         )}
       </div>
     </div>
+  );
+};
+
+function App() {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const savedToken = localStorage.getItem('token');
+    const savedUser = localStorage.getItem('user');
+    
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      setUser(JSON.parse(savedUser));
+    }
+    setLoading(false);
+  }, []);
+
+  const handleLogin = (userData, userToken) => {
+    setUser(userData);
+    setToken(userToken);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    setToken(null);
+  };
+
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        height: '100vh',
+        background: '#f8f9fa'
+      }}>
+        <div style={{ 
+          width: '40px', 
+          height: '40px', 
+          border: '4px solid #e5e7eb', 
+          borderTop: '4px solid #1a73e8', 
+          borderRadius: '50%', 
+          animation: 'spin 1s linear infinite' 
+        }}></div>
+      </div>
+    );
+  }
+
+  return (
+    <Router>
+      <Routes>
+        <Route 
+          path="/login" 
+          element={
+            user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />
+          } 
+        />
+        <Route 
+          path="/admin" 
+          element={
+            user && user.role === 'admin' ? 
+              <AdminPanel token={token} onLogout={handleLogout} /> : 
+              <Navigate to="/login" replace />
+          } 
+        />
+        <Route 
+          path="/" 
+          element={
+            user ? 
+              (user.role === 'admin' ? 
+                <Navigate to="/admin" replace /> : 
+                <ChatApp user={user} token={token} onLogout={handleLogout} />
+              ) : 
+              <Navigate to="/login" replace />
+          } 
+        />
+      </Routes>
+    </Router>
   );
 }
 
